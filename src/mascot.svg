@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect x="3" y="3" width="122" height="122" rx="29" fill="#FFE7AC" stroke="#43251C" stroke-width="6"/>
+  <path d="M104 16c1 5 3 7 8 8-5 1-7 3-8 8-1-5-3-7-8-8 5-1 7-3 8-8Z" fill="#F7B34F" stroke="#43251C" stroke-width="2.5" stroke-linejoin="round"/>
+  <g stroke="#43251C" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="30" cy="49" r="15" fill="#B87347"/>
+    <circle cx="86" cy="49" r="15" fill="#B87347"/>
+    <circle cx="30" cy="49" r="7" fill="#F4BE8A" stroke="none"/>
+    <circle cx="86" cy="49" r="7" fill="#F4BE8A" stroke="none"/>
+    <path d="M19 77c0-25 16-41 39-41 24 0 41 17 41 40 0 20-17 31-41 31-23 0-39-11-39-30Z" fill="#BE794B"/>
+    <path d="M35 41c1-16 9-25 23-25 13 0 22 9 23 25-13 6-33 6-46 0Z" fill="#C6925B"/>
+    <path d="M57 16c-5-1-7-6-3-6 3 0 4 2 4 5 1-5 6-7 7-3 0 2-3 4-8 4Z" fill="#754332" stroke-width="2.8"/>
+    <path d="M40 28c9 2 24 2 36 0M38 34c12 2 28 2 40 0M49 19c-3 5-4 13-4 19m16-21c3 5 4 13 4 21m3-19c4 6 5 13 5 19" stroke="#8B5638" stroke-width="2" opacity=".85"/>
+    <path d="M34 42c8-9 38-10 48 0-5 6-12 1-24 1-11 0-20 5-24-1Z" fill="#E0AA70" stroke-width="3.5"/>
+    <ellipse cx="56" cy="84" rx="16" ry="12" fill="#F6C896" stroke="none"/>
+    <ellipse cx="36" cy="82" rx="8" ry="4.5" fill="#F49A70" stroke="none"/>
+    <circle cx="46" cy="70" r="3.8" fill="#43251C" stroke="none"/>
+    <path d="M52 81c0-3 9-3 9 0 0 2-3 4-4.5 4S52 83 52 81Z" fill="#43251C" stroke="none"/>
+    <path d="M50 88c2 3 5 2 6.5-1 1.5 3 4 4 6.5 1" stroke-width="2.5"/>
+    <path d="m101 91 10 15c4 6-4 11-8 6L92 97" fill="#AA6440"/>
+    <circle cx="91" cy="77" r="23" fill="#E6F0EE"/>
+    <circle cx="91" cy="77" r="17.5" fill="#AEDDE5" stroke-width="2.6"/>
+    <path d="M80 77v10h21V77L91 68Z" fill="#FFE9B8" stroke-width="2.6"/>
+    <path d="m78 77 13-11 12 11" stroke="#8D432E" stroke-width="3.5"/>
+    <path d="M89 87v-6h5v6" fill="#B56C43" stroke-width="1.9"/>
+    <path d="M78 69c1-2 3-4 6-5" stroke="#F8FFFF" stroke-width="2.8"/>
+  </g>
+</svg>
