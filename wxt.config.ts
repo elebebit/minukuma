@@ -9,6 +9,6 @@ export default defineConfig({
     action: { default_icon: icons, default_title: 'みぬくま · Minukuma' },
     permissions: ['storage'],
     name: 'みぬくま',
-    description: 'SUUMOの賃貸物件の月額目安と初期費用を確認する拡張機能',
+    description: "SUUMO・LIFULL HOME'S・at homeの賃貸物件の実質月額目安と初期費用を確認する拡張機能",
   },
 });

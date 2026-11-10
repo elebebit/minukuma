@@ -54,7 +54,24 @@ export function yen(value: string): number | null {
 
 export function fee(raw = ''): Fee {
   const value = normalize(raw);
-  return { amount: /^(?:なし|無し|不要|0)$/.test(value) ? 0 : yen(value), raw };
+  return { amount: /^(?:なし|無し|不要|無|0)$/.test(value) ? 0 : yen(value), raw };
+}
+
+export function derivedFee(raw: string, amount: number): Fee {
+  return { raw, amount: Math.round(amount), derived: true };
+}
+
+export function advertisedFee(raw = ''): Fee {
+  return /^[-−―ー無]$/.test(normalize(raw)) ? { raw, amount: 0 } : fee(raw);
+}
+
+export function monthFee(raw = '', rent: number): Fee {
+  const norm = normalize(raw);
+  const match = norm.match(/^(\d+(?:\.\d+)?)\s*[ヶケかカ箇]月(?:分)?$/);
+  if (match) {
+    return derivedFee(raw, rent * Number(match[1]));
+  }
+  return advertisedFee(raw);
 }
 
 export function calculate(listing: Listing) {
