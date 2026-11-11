@@ -23,16 +23,16 @@ function parseGuarantee(raw = '', rent: number, managementAmount: number | null)
 
 export function* listRooms(root: ParentNode) {
   for (const section of root.querySelectorAll('.room-info-section, .property-card__accordion .room-info-section')) {
-    const rentElem = section.querySelector('.room-info-item.price .rent, .rent');
-    const anchor = section.querySelector<Element>(
-      '.room-info-section__room-detail a[href*="/chintai/"], a[href*="/chintai/"]'
-    );
-    if (!rentElem || !anchor) continue;
+    const priceContainer = section.querySelector('.room-info-item.price, .price');
+    const textElements = [...section.querySelectorAll('.room-info-item.price .room-info-item__text, .price .room-info-item__text')];
+    const rentElem = section.querySelector('.room-info-item.price .rent, .price .rent, .rent') ?? textElements[0];
+    const adminElem = textElements[1] ?? section.querySelector('.room-info-item.price .admin, .price .admin, .management');
+    const anchor = adminElem ?? rentElem ?? priceContainer?.lastElementChild ?? priceContainer;
+    if (!anchor) continue;
 
-    const rent = yen(rentElem.textContent ?? '');
+    const rent = yen(rentElem?.textContent ?? textElements[0]?.textContent ?? '');
     if (rent === null || rent <= 0) continue;
 
-    const textElements = [...section.querySelectorAll('.room-info-item.price .room-info-item__text')];
     const mgmtRaw = textElements[1]?.textContent?.trim() ?? '-';
     const management = advertisedFee(mgmtRaw);
 
@@ -43,7 +43,16 @@ export function* listRooms(root: ParentNode) {
     const deposit = monthFee(depositRaw, rent);
     const keyMoney = monthFee(keyMoneyRaw, rent);
 
+    const linkElem = section.querySelector<HTMLAnchorElement>(
+      '.room-info-section__room-detail a[href*="/chintai/"], a[href*="/chintai/"]'
+    );
+    const href = linkElem?.getAttribute?.('href') ?? (linkElem as { href?: string })?.href;
+    const url = href ? (href.startsWith('http') ? href : `https://www.athome.co.jp${href}`) : undefined;
+    const propertyName = section.closest?.('.object-item, .mod-pickupItem')?.querySelector?.('.item-header__title, .title')?.textContent?.trim() || undefined;
+
     const listing: Listing = {
+      propertyName,
+      url,
       rent,
       management,
       deposit,
@@ -127,15 +136,55 @@ export function detailRoom(root: ParentNode) {
   const floor = fields.get('階建 / 階') ?? fields.get('所在階') ?? fields.get('階') ?? undefined;
 
   // 交通到站
-  const trafficText = root.querySelector('.info-item--station p, .station')?.textContent?.trim()
+  const trafficText = root.querySelector('.info-item--station, .station')?.textContent?.trim()
     ?? fields.get('交通') ?? '';
-  let access: { station: string; minutes?: number } | undefined;
+  let access: { station: string; minutes?: number; stations?: { station: string; minutes?: number; line?: string; raw?: string }[] } | undefined;
   if (trafficText) {
-    const cleaned = normalize(trafficText).replace(/[「」]/g, '');
-    const match = cleaned.match(/^(.*?)\s*(?:徒歩|歩)\s*(\d+)\s*分/);
-    const station = match?.[1]?.split(/[\/\s]+/).filter(Boolean).at(-1)?.trim();
-    if (station && match?.[2]) {
-      access = { station, minutes: Number(match[2]) };
+    const rawList = trafficText.split(/[\r\n、]+/).map((s) => s.trim()).filter(Boolean);
+    const allStations = rawList.map((t) => {
+      const cleaned = normalize(t).replace(/[「」]/g, '').trim();
+      const match = cleaned.match(/^(.*?)\s*(?:徒歩|歩)\s*(\d+)\s*分/);
+      if (match && match[1] && match[2]) {
+        const rawPrefix = match[1].trim();
+        const minutes = Number(match[2]);
+        let line: string | undefined;
+        let station = rawPrefix;
+        if (rawPrefix.includes('/')) {
+          const parts = rawPrefix.split('/');
+          line = parts.slice(0, -1).join('/').trim();
+          station = parts.at(-1)?.trim() ?? rawPrefix;
+        } else if (rawPrefix.includes(' ')) {
+          const parts = rawPrefix.split(/\s+/);
+          line = parts.slice(0, -1).join(' ').trim();
+          station = parts.at(-1)?.trim() ?? rawPrefix;
+        }
+        return { station, minutes, line: line || undefined, raw: t };
+      }
+      let line: string | undefined;
+      let station = cleaned;
+      if (cleaned.includes('/')) {
+        const parts = cleaned.split('/');
+        line = parts.slice(0, -1).join('/').trim();
+        station = parts.at(-1)?.trim() ?? cleaned;
+      } else if (cleaned.includes(' ')) {
+        const parts = cleaned.split(/\s+/);
+        line = parts.slice(0, -1).join(' ').trim();
+        station = parts.at(-1)?.trim() ?? cleaned;
+      }
+      return { station, line: line || undefined, raw: t };
+    }).filter((s) => Boolean(s.station));
+
+    const walksOnly = allStations.filter((s) => s.minutes !== undefined && !/バス|停歩/.test(s.raw ?? ''));
+    const nearest = walksOnly.reduce<typeof walksOnly[number] | undefined>(
+      (best, route) => !best || route.minutes! < best.minutes! ? route : best, undefined,
+    ) ?? allStations[0];
+
+    if (nearest) {
+      access = {
+        station: nearest.station,
+        minutes: nearest.minutes,
+        stations: allStations.length > 0 ? allStations : undefined,
+      };
     }
   }
 
@@ -153,7 +202,12 @@ export function detailRoom(root: ParentNode) {
   const updateFee = fields.get('更新料');
   const leaseCharges = updateFee ? `更新料: ${updateFee}` : undefined;
 
+  const propertyName = root.querySelector('.item-header__title, .item-title, h1')?.textContent?.trim() || undefined;
+  const address = (fields.get('所在地') ?? fields.get('住所') ?? root.querySelector('.info-item--address, .address')?.textContent?.trim()) || undefined;
+
   const listing: Listing = {
+    propertyName,
+    url: typeof window !== 'undefined' ? window.location.href : undefined,
     rent,
     management,
     deposit,
@@ -173,6 +227,7 @@ export function detailRoom(root: ParentNode) {
     },
     facts: {
       access,
+      address,
       gas,
       direction,
       structure,

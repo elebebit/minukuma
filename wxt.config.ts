@@ -7,8 +7,8 @@ export default defineConfig({
   manifest: {
     icons,
     action: { default_icon: icons, default_title: 'みぬくま · Minukuma' },
-    permissions: ['storage'],
-    name: 'みぬくま',
+    permissions: ['storage', 'activeTab'],
+    name: 'みぬくま (Minukuma)',
     description: "SUUMO・LIFULL HOME'S・at homeの賃貸物件の実質月額目安と初期費用を確認する拡張機能",
   },
 });

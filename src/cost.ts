@@ -6,7 +6,16 @@ export type Fee = {
   derived?: boolean;
 };
 
+export interface StationAccess {
+  station: string;
+  minutes?: number;
+  line?: string;
+  raw?: string;
+}
+
 export type Listing = {
+  propertyName?: string;
+  url?: string;
   rent: number;
   management: Fee;
   deposit: Fee;
@@ -18,7 +27,12 @@ export type Listing = {
   guarantee?: Fee;
   otherInitial?: Fee;
   facts?: {
-    access?: { station: string; minutes?: number };
+    access?: {
+      station: string;
+      minutes?: number;
+      stations?: StationAccess[];
+    };
+    address?: string;
     gas?: string;
     direction?: string;
     structure?: string;
@@ -74,12 +88,13 @@ export function monthFee(raw = '', rent: number): Fee {
   return advertisedFee(raw);
 }
 
-export function calculate(listing: Listing) {
+export function calculate(listing: Listing, amortizationMonths = 24) {
+  const months = amortizationMonths > 0 ? amortizationMonths : 24;
   const { rent, management, deposit, keyMoney, depreciation, guaranteeDeposit, agency, insurance, guarantee, otherInitial } = listing;
   const initial = [deposit, guaranteeDeposit, keyMoney, agency, insurance, guarantee, otherInitial];
   const initialSubtotal = initial.reduce((sum, item) => sum + (item?.amount ?? 0), 0);
   const upfrontNonrefundable = initialSubtotal - (deposit.amount ?? 0) - (guaranteeDeposit?.amount ?? 0)
     + (depreciation?.amount ?? 0);
-  const monthly = rent + (management.amount ?? 0) + Math.round(upfrontNonrefundable / 24);
+  const monthly = rent + (management.amount ?? 0) + Math.round(upfrontNonrefundable / months);
   return { monthly, difference: monthly - rent, initialSubtotal };
 }

@@ -37,7 +37,14 @@ export function* listRooms(root: ParentNode) {
     const guaranteeDeposit = initials[2] ? monthFee(initials[2], rent) : undefined;
     const depreciation = initials[3] ? monthFee(initials[3], rent) : undefined;
 
+    const link = row.querySelector<HTMLAnchorElement>('a[href*="/chintai/"]')?.href;
+    const bld = row.closest?.('.mod-mergeBuilding')?.querySelector?.('.mod-mergeBuilding--name, .buildingName')?.textContent?.trim();
+    const room = row.querySelector?.('.roomNo, td:nth-child(2)')?.textContent?.trim();
+    const propertyName = [bld, room].filter(Boolean).join(' ') || undefined;
+
     const listing: Listing = {
+      propertyName,
+      url: link,
       rent,
       management,
       deposit,
@@ -148,19 +155,51 @@ function parseJsonLdDetail(root: ParentNode): Listing | null {
       const insurance = insuranceRaw ? fee(insuranceRaw) : undefined;
 
       // 交通 (Station access)
-      const traffic = entityProps.get('交通');
-      const trafficList = Array.isArray(traffic) ? traffic : traffic ? [traffic] : [];
-      let nearest: { station: string; minutes?: number } | undefined;
-      for (const t of trafficList) {
-        const match = normalize(String(t)).match(/^(.*?)\s*(?:徒歩|歩)\s*(\d+)\s*分$/);
-        const station = match?.[1]?.split(/[\/\s]+/).at(-1)?.trim();
-        if (station && match?.[2]) {
-          const minutes = Number(match[2]);
-          if (!nearest || minutes < (nearest.minutes ?? Infinity)) {
-            nearest = { station, minutes };
-          }
-        }
+      const traffic = entityProps.get('交通') ?? root.querySelector('.mod-traffic, .traffic')?.textContent;
+      let trafficList: string[] = [];
+      if (Array.isArray(traffic)) {
+        trafficList = traffic.map(String);
+      } else if (traffic) {
+        trafficList = String(traffic).split(/[\r\n,、]+/).map((s) => s.trim()).filter(Boolean);
       }
+
+      const allStations = trafficList.map((t) => {
+        const cleaned = normalize(String(t)).trim();
+        const match = cleaned.match(/^(.*?)\s*(?:徒歩|歩)\s*(\d+)\s*分/);
+        if (match && match[1] && match[2]) {
+          const rawPrefix = match[1].trim();
+          const minutes = Number(match[2]);
+          let line: string | undefined;
+          let station = rawPrefix;
+          if (rawPrefix.includes('/')) {
+            const parts = rawPrefix.split('/');
+            line = parts.slice(0, -1).join('/').trim();
+            station = parts.at(-1)?.trim() ?? rawPrefix;
+          } else if (rawPrefix.includes(' ')) {
+            const parts = rawPrefix.split(/\s+/);
+            line = parts.slice(0, -1).join(' ').trim();
+            station = parts.at(-1)?.trim() ?? rawPrefix;
+          }
+          return { station, minutes, line: line || undefined, raw: String(t) };
+        }
+        let line: string | undefined;
+        let station = cleaned;
+        if (cleaned.includes('/')) {
+          const parts = cleaned.split('/');
+          line = parts.slice(0, -1).join('/').trim();
+          station = parts.at(-1)?.trim() ?? cleaned;
+        } else if (cleaned.includes(' ')) {
+          const parts = cleaned.split(/\s+/);
+          line = parts.slice(0, -1).join(' ').trim();
+          station = parts.at(-1)?.trim() ?? cleaned;
+        }
+        return { station, line: line || undefined, raw: String(t) };
+      }).filter((s) => Boolean(s.station));
+
+      const walksOnly = allStations.filter((s) => s.minutes !== undefined && !/バス|停歩/.test(s.raw ?? ''));
+      const nearest = walksOnly.reduce<typeof walksOnly[number] | undefined>(
+        (best, route) => !best || route.minutes! < best.minutes! ? route : best, undefined,
+      ) ?? allStations[0];
 
       // 燃气、朝向、结构
       const amenities = (data.mainEntity?.amenityFeature ?? []) as Array<{ name: string; value: boolean }>;
@@ -206,7 +245,23 @@ function parseJsonLdDetail(root: ParentNode): Listing | null {
       const updateFee = offerProps.get('更新料');
       const leaseCharges = updateFee ? `更新料: ${updateFee}円` : undefined;
 
+      const rawAddr = data.mainEntity?.address;
+      let address: string | undefined;
+      if (typeof rawAddr === 'string') {
+        address = rawAddr.trim() || undefined;
+      } else if (rawAddr && typeof rawAddr === 'object') {
+        const addrObj = rawAddr as Record<string, string>;
+        address = [addrObj.addressRegion, addrObj.addressLocality, addrObj.streetAddress].filter(Boolean).join('') || undefined;
+      }
+      if (!address) {
+        address = String(entityProps.get('所在地') ?? entityProps.get('住所') ?? root.querySelector?.('.mod-bukkenAddress, .address')?.textContent ?? '').trim() || undefined;
+      }
+
+      const propertyName = data.mainEntity?.name ? String(data.mainEntity.name) : root.querySelector?.('h1.mod-bukkenName, .bukkenName, h1')?.textContent?.trim() || undefined;
+
       return {
+        propertyName,
+        url: typeof window !== 'undefined' ? window.location.href : undefined,
         rent,
         management,
         deposit,
@@ -225,7 +280,12 @@ function parseJsonLdDetail(root: ParentNode): Listing | null {
           ongoingGuarantee,
         },
         facts: {
-          access: nearest,
+          access: nearest ? {
+            station: nearest.station,
+            minutes: nearest.minutes,
+            stations: allStations.length > 0 ? allStations : undefined,
+          } : undefined,
+          address,
           gas,
           direction,
           structure,
@@ -291,7 +351,11 @@ export function detailRoom(root: ParentNode) {
   const guaranteeRaw = fields.get('保証会社') ?? '';
   const { guarantee, ongoingGuarantee } = parseGuarantee(guaranteeRaw, rent, management.amount);
 
+  const propertyName = root.querySelector('h1.mod-bukkenName, .bukkenName, h1')?.textContent?.trim() || undefined;
+
   const listing: Listing = {
+    propertyName,
+    url: typeof window !== 'undefined' ? window.location.href : undefined,
     rent,
     management,
     deposit,
@@ -305,6 +369,7 @@ export function detailRoom(root: ParentNode) {
       ongoingGuarantee,
     },
     facts: {
+      address: (fields.get('所在地') ?? fields.get('住所') ?? root.querySelector('.mod-bukkenAddress')?.textContent?.trim()) || undefined,
       direction: fields.get('主要採光面') ?? fields.get('向き'),
       structure: fields.get('建物構造') ?? fields.get('構造'),
       built: fields.get('築年月'),

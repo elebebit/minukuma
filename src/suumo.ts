@@ -13,14 +13,51 @@ function advertisedFee(raw: string) {
 export function* listRooms(root: ParentNode) {
   for (const row of root.querySelectorAll('.cassetteitem_other tbody tr')) {
     const price = row.querySelector('.cassetteitem_price--rent');
-    const anchor = row.querySelector('a.cassetteitem_other-linktext');
+    const admin = row.querySelector('.cassetteitem_price--administration');
+    const anchor = admin ?? price;
     const rent = yen(price?.textContent ?? '');
     if (!anchor || rent === null || rent <= 0) continue;
+
+    const cassette = row.closest?.('.cassetteitem');
+    const col1 = cassette?.querySelector?.('.cassetteitem_detail-col1')?.textContent ?? '';
+    const col2 = cassette?.querySelector?.('.cassetteitem_detail-col2')?.textContent ?? '';
+    const bldName = cassette?.querySelector?.('.cassetteitem_content-title')?.textContent?.trim() ?? '';
+    const structure = col1.match(/木造|軽量鉄骨|鉄骨造|RC|鉄筋コンクリート|SRC/)?.[0];
+    const floor = row.querySelector('.cassetteitem_other-col--floor, td:nth-child(3)')?.textContent?.trim();
+    const linkElem = row.querySelector<HTMLAnchorElement>(
+      'a.cassetteitem_other-linktext, a.js-cassette_link_href, a[href*="/chintai/jnc_"], a[href*="/chintai/"], td a[href]'
+    );
+    const hrefAttr = linkElem?.getAttribute?.('href');
+    const detailLink = hrefAttr
+      ? (hrefAttr.startsWith('http') ? hrefAttr : `https://suumo.jp${hrefAttr.startsWith('/') ? '' : '/'}${hrefAttr}`)
+      : linkElem?.href || undefined;
+    const propertyName = [bldName, floor].filter(Boolean).join(' ') || undefined;
+
+    const stationMatch = col2.match(/([^\s\/]+駅\s*(?:歩|徒歩)\s*\d+\s*分)/);
+    const station = stationMatch?.[1]?.trim();
+
+    const notes: Listing['notes'] = [];
+    if (/木造|軽量鉄骨/.test(col1)) {
+      notes.push({ kind: 'wood', raw: structure ?? '木造' });
+    }
+    if (floor && /^1階/.test(floor)) {
+      notes.push({ kind: 'floor', raw: floor });
+    }
+
     const listing: Listing = {
+      propertyName,
+      url: detailLink,
       rent,
       management: advertisedFee(read(row, '.cassetteitem_price--administration')),
       deposit: advertisedFee(read(row, '.cassetteitem_price--deposit')),
       keyMoney: advertisedFee(read(row, '.cassetteitem_price--gratuity')),
+      facts: {
+        access: station ? { station } : undefined,
+        address: col1.trim() || undefined,
+        structure,
+        floor,
+      },
+      notes: notes.length > 0 ? notes : undefined,
     };
     yield { anchor, listing };
   }
@@ -60,17 +97,52 @@ export function detailRoom(root: ParentNode) {
     return !trimmed || /^[-−―ー]+$/.test(normalize(trimmed)) ? undefined : trimmed;
   };
   const accessCell = overview.get('駅徒歩');
-  const routes = [...(accessCell?.querySelectorAll('.property_view_table-read') ?? [])]
+  let routes = [...(accessCell?.querySelectorAll('.property_view_table-read') ?? [])]
     .map((item) => item.textContent?.trim() ?? '').filter(Boolean);
-  const walks = routes.flatMap((route) => {
-    const match = normalize(route).match(/^(.*?)\s*(?:徒歩|歩)\s*(\d+)\s*分$/);
-    const station = match?.[1]?.split('/').at(-1)?.trim();
-    return station && match?.[2] && !/バス|停歩/.test(route)
-      ? [{ station, minutes: Number(match[2]) }] : [];
-  });
-  const nearest = walks.reduce<(typeof walks)[number] | undefined>(
-    (best, route) => !best || route.minutes < best.minutes ? route : best, undefined,
-  );
+  if (routes.length === 0 && accessCell) {
+    routes = (accessCell.innerHTML || '')
+      .split(/<br\s*\/?>|[\r\n]+/)
+      .map((s) => s.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean);
+  }
+
+  const allStations = routes.map((route) => {
+    const cleaned = normalize(route).trim();
+    const match = cleaned.match(/^(.*?)\s*(?:徒歩|歩)\s*(\d+)\s*分/);
+    if (match && match[1] && match[2]) {
+      const rawPrefix = match[1].trim();
+      const minutes = Number(match[2]);
+      let line: string | undefined;
+      let station = rawPrefix;
+      if (rawPrefix.includes('/')) {
+        const parts = rawPrefix.split('/');
+        line = parts.slice(0, -1).join('/').trim();
+        station = parts.at(-1)?.trim() ?? rawPrefix;
+      } else if (rawPrefix.includes(' ')) {
+        const parts = rawPrefix.split(/\s+/);
+        line = parts.slice(0, -1).join(' ').trim();
+        station = parts.at(-1)?.trim() ?? rawPrefix;
+      }
+      return { station, minutes, line: line || undefined, raw: route };
+    }
+    let line: string | undefined;
+    let station = cleaned;
+    if (cleaned.includes('/')) {
+      const parts = cleaned.split('/');
+      line = parts.slice(0, -1).join('/').trim();
+      station = parts.at(-1)?.trim() ?? cleaned;
+    } else if (cleaned.includes(' ')) {
+      const parts = cleaned.split(/\s+/);
+      line = parts.slice(0, -1).join(' ').trim();
+      station = parts.at(-1)?.trim() ?? cleaned;
+    }
+    return { station, line: line || undefined, raw: route };
+  }).filter((s) => Boolean(s.station));
+
+  const walksOnly = allStations.filter((s) => s.minutes !== undefined && !/バス|停歩/.test(s.raw ?? ''));
+  const nearest = walksOnly.reduce<typeof walksOnly[number] | undefined>(
+    (best, route) => !best || route.minutes! < best.minutes! ? route : best, undefined,
+  ) ?? allStations[0];
   const firstRoute = shown(routes[0] ?? accessCell?.textContent ?? '');
   const ageLabel = normalize(overview.get('築年数')?.textContent ?? '');
   const age = ageLabel.match(/^築\s*(\d+)\s*年$/)?.[1];
@@ -130,7 +202,12 @@ export function detailRoom(root: ParentNode) {
     notes.push({ kind: 'otherRecurring', raw: otherRecurring });
   }
 
+  const propertyName = shown(read(root, '.section_header-title, .property_view_header-title, h1'));
+  const address = shown(overview.get('所在地')?.textContent ?? fields.get('所在地') ?? read(root, '.property_view_detail--address'));
+
   const listing: Listing = {
+    propertyName,
+    url: typeof window !== 'undefined' ? window.location.href : undefined,
     rent, management, deposit, keyMoney: advertisedFee(headline.get('礼金') ?? ''),
     guaranteeDeposit, depreciation, agency, insurance, guarantee, otherInitial, notes,
     lease: {
@@ -141,7 +218,12 @@ export function detailRoom(root: ParentNode) {
       ongoingGuarantee,
     },
     facts: {
-      access: nearest ?? (firstRoute ? { station: firstRoute } : undefined),
+      access: nearest ? {
+        station: nearest.station,
+        minutes: nearest.minutes,
+        stations: allStations.length > 0 ? allStations : undefined,
+      } : (firstRoute ? { station: firstRoute } : undefined),
+      address,
       gas,
       direction: shown(overview.get('向き')?.textContent ?? ''),
       structure: shown(structure),
